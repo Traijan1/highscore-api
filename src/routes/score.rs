@@ -99,6 +99,6 @@ async fn put_score(mut db: Connection<Db>, score: Json<ScoreEntry>) {
         .unwrap();
 }
 
-pub fn routes() -> Vec<Route> {
+pub(super) fn routes() -> Vec<Route> {
     routes![post_score, get_score, delete_score, put_score]
 }

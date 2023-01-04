@@ -8,11 +8,9 @@ mod tests;
 
 use db::Db;
 use rocket_db_pools::Database;
-use routes::score::routes;
+use routes::routes;
 
 #[launch]
 async fn rocket() -> _ {
-    let routes = routes();
-
-    rocket::build().attach(Db::init()).mount("/api", routes)
+    rocket::build().attach(Db::init()).mount("/api", routes())
 }
