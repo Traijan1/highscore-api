@@ -14,7 +14,6 @@ async fn post_score(
     mut db: Connection<Db>,
     mut score: Json<ScoreEntry>,
 ) -> (Status, Json<ScoreEntry>) {
-    println!("asdsa");
     let result = sqlx::query(&format!(
         "INSERT INTO scores (name, score, project_id) VALUES ('{}', {}, 1)",
         score.name, score.score
