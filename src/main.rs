@@ -1,12 +1,11 @@
 #[macro_use]
 extern crate rocket;
 
-mod db;
+mod data;
 mod routes;
-mod score_entry;
 mod tests;
 
-use db::Db;
+use data::db::Db;
 use rocket_db_pools::Database;
 use routes::routes;
 

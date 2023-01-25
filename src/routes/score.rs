@@ -1,16 +1,19 @@
-use crate::db::Db;
-use crate::score_entry::ScoreEntry;
+use crate::data::db::Db;
+use crate::data::guards::rate_limit_guard::RateLimitGuard;
+use crate::data::score_entry::ScoreEntry;
 use rocket::http::Status;
 use rocket::response::status::{self};
 use rocket::serde::json::Json;
 use rocket::Route;
 use rocket_db_pools::sqlx::Row;
 use rocket_db_pools::{sqlx, Connection};
+use rocket_governor::RocketGovernor;
 
 const MAX_LIMIT: u32 = 100;
 
 #[post("/score", format = "json", data = "<score>")]
 async fn post_score(
+    _limitguard: RocketGovernor<'_, RateLimitGuard>,
     mut db: Connection<Db>,
     mut score: Json<ScoreEntry>,
 ) -> (Status, Json<ScoreEntry>) {
@@ -31,6 +34,7 @@ async fn post_score(
 
 #[get("/score?<offset>&<limit>")]
 async fn get_score(
+    _limitguard: RocketGovernor<'_, RateLimitGuard>,
     mut db: Connection<Db>,
     offset: Option<usize>,
     limit: Option<u32>,
@@ -74,7 +78,11 @@ async fn get_score(
 }
 
 #[delete("/score?<id>")]
-async fn delete_score(mut db: Connection<Db>, id: u32) -> Result<(), status::BadRequest<()>> {
+async fn delete_score(
+    _limitguard: RocketGovernor<'_, RateLimitGuard>,
+    mut db: Connection<Db>,
+    id: u32,
+) -> Result<(), status::BadRequest<()>> {
     let result = sqlx::query("DELETE from scores where id = ?")
         .bind(id)
         .execute(&mut *db)
@@ -88,7 +96,11 @@ async fn delete_score(mut db: Connection<Db>, id: u32) -> Result<(), status::Bad
 }
 
 #[put("/score", format = "json", data = "<score>")]
-async fn put_score(mut db: Connection<Db>, score: Json<ScoreEntry>) {
+async fn put_score(
+    _limitguard: RocketGovernor<'_, RateLimitGuard>,
+    mut db: Connection<Db>,
+    score: Json<ScoreEntry>,
+) {
     sqlx::query("UPDATE scores set name = ?, score = ? where id = ?")
         .bind(score.name.clone())
         .bind(score.score)

@@ -2,7 +2,7 @@ use rocket::{
     futures::executor::block_on, http::Status, local::asynchronous::Client, serde::json::Json,
 };
 
-use crate::score_entry::ScoreEntry;
+use crate::data::score_entry::ScoreEntry;
 
 use super::rocket;
 
