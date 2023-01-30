@@ -3,7 +3,7 @@ use crate::data::guards::rate_limit_guard::RateLimitGuard;
 use crate::data::score_entry::ScoreEntry;
 use rocket::http::Status;
 use rocket::response::status::{self};
-use rocket::serde::json::Json;
+use rocket::serde::json::{serde_json, Json, Value};
 use rocket::Route;
 use rocket_db_pools::sqlx::Row;
 use rocket_db_pools::{sqlx, Connection};
@@ -17,23 +17,27 @@ async fn post_score(
     mut db: Connection<Db>,
     mut score: Json<ScoreEntry>,
 ) -> (Status, Json<ScoreEntry>) {
-    let result = sqlx::query(&format!(
-        "INSERT INTO scores (name, score, project_id) VALUES ('{}', {}, 1)",
-        score.name, score.score
-    ))
-    .execute(&mut *db)
-    .await;
+    let custom_data = score.custom.clone().map(|value| value.to_string());
+
+    let result =
+        sqlx::query("INSERT INTO scores (name, score, custom, project_id) VALUES (?, ?, ?, 1)")
+            .bind(score.name.clone())
+            .bind(score.score)
+            .bind(custom_data)
+            .execute(&mut *db)
+            .await;
 
     if result.is_ok() {
         score.id = result.unwrap().last_insert_rowid() as u32;
         (Status::Created, score)
     } else {
+        println!("{}", result.err().unwrap());
         (Status::NotAcceptable, score)
     }
 }
 
-#[get("/score?<offset>&<limit>")]
-async fn get_score(
+#[get("/scores?<offset>&<limit>")]
+async fn get_scores(
     _limitguard: RocketGovernor<'_, RateLimitGuard>,
     mut db: Connection<Db>,
     offset: Option<usize>,
@@ -57,8 +61,6 @@ async fn get_score(
         sql = sql.bind(offset);
     }
 
-    println!("{}", sql_string);
-
     let entries: Vec<_> = sql
         .bind(limit)
         .fetch_all(&mut *db)
@@ -69,12 +71,36 @@ async fn get_score(
             name: row.try_get("name").unwrap(),
             score: row.try_get("score").unwrap(),
             id: row.try_get("id").unwrap(),
+            custom: get_custom_data(row.try_get("custom")),
         })
         .collect();
 
-    println!("{}", entries.len());
-
     Json::from(entries)
+}
+
+#[get("/score?<id>")]
+async fn get_score_by_id(
+    _limitguard: RocketGovernor<'_, RateLimitGuard>,
+    mut db: Connection<Db>,
+    id: u32,
+) -> Result<Json<ScoreEntry>, status::BadRequest<()>> {
+    let sql = sqlx::query("SELECT * from scores where id = ?");
+
+    let entries: Vec<_> = sql
+        .bind(id)
+        .fetch_all(&mut *db)
+        .await
+        .unwrap()
+        .iter()
+        .map(|row| ScoreEntry {
+            name: row.try_get("name").unwrap(),
+            score: row.try_get("score").unwrap(),
+            id: row.try_get("id").unwrap(),
+            custom: get_custom_data(row.try_get("custom")),
+        })
+        .collect();
+
+    Ok(Json::from(entries[0].clone()))
 }
 
 #[delete("/score?<id>")]
@@ -101,15 +127,34 @@ async fn put_score(
     mut db: Connection<Db>,
     score: Json<ScoreEntry>,
 ) {
-    sqlx::query("UPDATE scores set name = ?, score = ? where id = ?")
+    let custom_data = score.custom.clone().map(|value| value.to_string());
+
+    sqlx::query("UPDATE scores set name = ?, score = ?, custom = ? where id = ?")
         .bind(score.name.clone())
         .bind(score.score)
+        .bind(custom_data)
         .bind(score.id)
         .execute(&mut *db)
         .await
         .unwrap();
 }
 
+fn get_custom_data(custom_data: Result<&str, sqlx::Error>) -> Option<Value> {
+    match custom_data {
+        Ok(value) => match serde_json::from_str(value) {
+            Ok(value) => Some(value),
+            Err(_) => None,
+        },
+        Err(_) => None,
+    }
+}
+
 pub(super) fn routes() -> Vec<Route> {
-    routes![post_score, get_score, delete_score, put_score]
+    routes![
+        post_score,
+        get_scores,
+        delete_score,
+        put_score,
+        get_score_by_id
+    ]
 }
