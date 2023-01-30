@@ -5,6 +5,7 @@ use rocket::http::Status;
 use rocket::response::status::{self};
 use rocket::serde::json::{serde_json, Json, Value};
 use rocket::Route;
+use rocket_db_pools::sqlx::sqlite::SqliteRow;
 use rocket_db_pools::sqlx::Row;
 use rocket_db_pools::{sqlx, Connection};
 use rocket_governor::RocketGovernor;
@@ -67,12 +68,7 @@ async fn get_scores(
         .await
         .unwrap()
         .iter()
-        .map(|row| ScoreEntry {
-            name: row.try_get("name").unwrap(),
-            score: row.try_get("score").unwrap(),
-            id: row.try_get("id").unwrap(),
-            custom: get_custom_data(row.try_get("custom")),
-        })
+        .map(get_score_from_row)
         .collect();
 
     Json::from(entries)
@@ -92,12 +88,7 @@ async fn get_score_by_id(
         .await
         .unwrap()
         .iter()
-        .map(|row| ScoreEntry {
-            name: row.try_get("name").unwrap(),
-            score: row.try_get("score").unwrap(),
-            id: row.try_get("id").unwrap(),
-            custom: get_custom_data(row.try_get("custom")),
-        })
+        .map(get_score_from_row)
         .collect();
 
     Ok(Json::from(entries[0].clone()))
@@ -139,13 +130,18 @@ async fn put_score(
         .unwrap();
 }
 
-fn get_custom_data(custom_data: Result<&str, sqlx::Error>) -> Option<Value> {
-    match custom_data {
-        Ok(value) => match serde_json::from_str(value) {
-            Ok(value) => Some(value),
+fn get_score_from_row(row: &SqliteRow) -> ScoreEntry {
+    ScoreEntry {
+        name: row.try_get("name").unwrap(),
+        score: row.try_get("score").unwrap(),
+        id: row.try_get("id").unwrap(),
+        custom: match row.try_get("custom") {
+            Ok(value) => match serde_json::from_str(value) {
+                Ok(value) => Some(value),
+                Err(_) => None,
+            },
             Err(_) => None,
         },
-        Err(_) => None,
     }
 }
 
